@@ -52,6 +52,8 @@ class LayerConvolution:
 
 
 
+
+
 if __name__ == "__main__":
     x_train, y_train, x_valid, y_valid, x_test, y_test = load_mnist()
     # dim_input = (*x_train[0].shape, 1)
