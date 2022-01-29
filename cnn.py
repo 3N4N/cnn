@@ -27,32 +27,51 @@ class LayerConvolution:
         self.weights = np.random.randn(self.num_filters, self.dim_input[2], *self.dim_filters)
         self.biases = np.random.rand(self.num_filters,1)
 
-    def convolve(self, input_neurons):
         self.dim_output = (self.dim_input[:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
         self.dim_output = self.dim_output.astype(int)
         self.output = np.zeros((*self.dim_output, self.num_filters))
-        del self.dim_output
 
     def convolve(self, input_neurons):
         self.output = self.output.reshape((np.prod(self.dim_output), self.num_filters))
-
         for j in range(self.num_filters):
-            slide = 0
+            col = 0
             row = 0
-
             for i in range(self.output.shape[0]):
                 self.output[i][j] = np.sum(
                     input_neurons[row:self.dim_filters[0]+row,
-                                  slide:self.dim_filters[1]+slide,
+                                  col:self.dim_filters[1]+col,
                                   :] * self.weights[j]) + self.biases[j]
-                slide += self.stride
-
-                if self.dim_filters[0] + slide - self.stride >= self.width_in:
-                    slide = 0
+                col += self.stride
+                if col + self.dim_filters[0] > self.dim_input[1]:
+                    col = 0
                     row += self.stride
+        self.output = self.output.reshape((*self.dim_output, self.num_filters))
 
-        self.output = self.output.reshape((*self.output.shape, self.num_filters))
 
+class LayerMaxPooling:
+    def __init__(self, dim_input, dim_filters, stride):
+        self.dim_input = dim_input.astype(int)
+        self.dim_filters = dim_filters.astype(int)
+        self.stride = stride
+
+        self.dim_output = (self.dim_input[:-1] - self.dim_filters) / self.stride + 1
+        self.dim_output = self.dim_output.astype(int)
+        self.output = np.zeros((*self.dim_output, self.dim_input[:-1]))
+
+    def pool(self, input_image):
+        self.output = self.output.reshape((np.prod(self.dim_output), self.dim_input[:-1]))
+        for j in range(self.dim_input[2]):
+            row = 0
+            col = 0
+            for i in range(self.output.shape[0]):
+                toPool = input_image[row:self.dim_filters[0]+row,
+                                     col:self.dim_filters[0]+col][j]
+                self.output[i][j] = np.amax(toPool)
+                col += self.dim_filters[1]
+                if col + dim_filters[1] > self.dim_input[1]:
+                    col = 0
+                    row += self.dim_filters[0]
+        self.output = self.output.reshape((*self.dim_output, self.dim_input[:-1]))
 
 
 
