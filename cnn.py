@@ -64,15 +64,31 @@ class LayerMaxPooling:
             row = 0
             col = 0
             for i in range(self.output.shape[0]):
-                toPool = input_image[row:self.dim_filters[0]+row,
+                slide = input_image[row:self.dim_filters[0]+row,
                                      col:self.dim_filters[0]+col][j]
-                self.output[i][j] = np.amax(toPool)
+                self.output[i][j] = np.amax(slide)
                 col += self.dim_filters[1]
                 if col + dim_filters[1] > self.dim_input[1]:
                     col = 0
                     row += self.dim_filters[0]
         self.output = self.output.reshape((*self.dim_output, self.dim_input[:-1]))
 
+
+class LayerFullyConnected:
+    def __init__(self, dim_input, dim_output):
+        self.dim_input = dim_input.astype(int)
+        self.dim_output = dim_output.astype(int)
+
+        self.weights = np.random.randn(self.num_filters, self.dim_input[2], *self.dim_filters)
+        self.biases = np.random.rand(self.num_filters,1)
+
+        self.weights = np.random.randn(self.dim_output, *self.dim_input)
+        self.biases = np.random.randn(*self.dim_output,1)
+
+    def forward(self, input_data):
+        self.weights = self.weights.reshape((self.dim_output, np.prod(self.dim_input)))
+        self.input_data = input_data.reshape((np.prod(dim_input), 1))
+        self.output = np.dot(self.weights, input_data) + self.biases
 
 
 
