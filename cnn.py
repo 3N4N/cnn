@@ -30,7 +30,8 @@ class LayerConvolution:
     def convolve(self, input_neurons):
         self.dim_output = (self.dim_input[:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
         self.dim_output = self.dim_output.astype(int)
-        self.output = np.zeros((self.num_filters, *self.dim_output))
+        self.output = np.zeros((self.num_filters, np.prod(self.dim_output)))
+        del self.dim_output
 
         act_length1d =  self.output.shape[1]
 
@@ -40,7 +41,7 @@ class LayerConvolution:
             for i in range(act_length1d):  # loop til the output array is filled up -> one dimensional (600)
 
                 # ACTIVATIONS -> loop through each conv block horizontally
-                self.output[j][i] = np.sum(input_neurons[:,row:self.dim_filters[0]+row, slide:self.dim_filters[1]+slide] * self.weights[j]) + self.biases[j]
+                self.output[j][i] = np.sum(input_neurons[row:self.dim_filters[0]+row, slide:self.dim_filters[1]+slide, :] * self.weights[j]) + self.biases[j]
                 slide += self.stride
 
                 if self.dim_filters[0] + slide - self.stride >= self.width_in:    # wrap indices at the end of each row
@@ -56,6 +57,5 @@ class LayerConvolution:
 
 if __name__ == "__main__":
     x_train, y_train, x_valid, y_valid, x_test, y_test = load_mnist()
-    # dim_input = (*x_train[0].shape, 1)
     dim_input = np.append(np.array(x_train[0].shape), 1)
     layer1 = LayerConvolution(dim_input, 6, np.array((5,5)), 1, 2)
