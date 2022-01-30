@@ -31,7 +31,7 @@ class LayerConvolution:
         self.dim_output = self.dim_output.astype(int)
         self.output = np.zeros((*self.dim_output, self.num_filters))
 
-    def convolve(self, input_neurons):
+    def forward(self, input_neurons):
         self.output = self.output.reshape((np.prod(self.dim_output), self.num_filters))
         for j in range(self.num_filters):
             col = 0
@@ -58,7 +58,7 @@ class LayerMaxPooling:
         self.dim_output = self.dim_output.astype(int)
         self.output = np.zeros((*self.dim_output, self.dim_input[:-1]))
 
-    def pool(self, input_image):
+    def forward(self, input_image):
         self.output = self.output.reshape((np.prod(self.dim_output), self.dim_input[:-1]))
         for j in range(self.dim_input[2]):
             row = 0
