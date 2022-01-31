@@ -42,20 +42,26 @@ class LayerConvolution:
         self.output = np.zeros((*self.dim_output, self.num_filters))
 
     def forward(self, input_neurons):
+        input_neurons = zero_pad(input_neurons, self.padding)
+        print(input_neurons.shape)
         self.output = self.output.reshape((np.prod(self.dim_output), self.num_filters))
         for j in range(self.num_filters):
             col = 0
             row = 0
+            print("Filter no.", j)
             for i in range(self.output.shape[0]):
                 self.output[i][j] = np.sum(
-                    input_neurons[row:self.dim_filters[0]+row,
-                                  col:self.dim_filters[1]+col,
-                                  :] * self.weights[j]) + self.biases[j]
+                    np.multiply(input_neurons[:,
+                                              row:self.dim_filters[0]+row,
+                                              col:self.dim_filters[1]+col,
+                                              :], self.weights[j])) + self.biases[j]
                 col += self.stride
                 if col + self.dim_filters[0] > self.dim_input[1]:
                     col = 0
                     row += self.stride
         self.output = self.output.reshape((*self.dim_output, self.num_filters))
+        return self.output
+
 
 
 class LayerMaxPooling:
@@ -107,3 +113,5 @@ if __name__ == "__main__":
     x_train, y_train, x_valid, y_valid, x_test, y_test = load_mnist()
     dim_input = np.append(np.array(x_train[0].shape), 1)
     layer1 = LayerConvolution(dim_input, 6, np.array((5,5)), 1, 2)
+    z = np.expand_dims(x_train, 3)
+    o = layer1.forward(z[:1000])
