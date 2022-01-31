@@ -106,6 +106,12 @@ class LayerFullyConnected:
         self.input_data = input_data.reshape((np.prod(dim_input), 1))
         self.output = np.dot(self.weights, input_data) + self.biases
 
+class LayerFlattening:
+    def __init__(self, dim_input):
+        self.dim_input = dim_input.astype(int)
+
+    def forward(self, input_data):
+        output = np.ravel(input_data)
 
 
 
