@@ -1,6 +1,8 @@
 from tensorflow.keras import datasets
 import numpy as np
 
+from tensorflow.keras import datasets
+
 
 def load_mnist():
     (x_train, y_train), (x_eval, y_eval) = datasets.mnist.load_data()
@@ -15,6 +17,14 @@ def ReLU(x):
 
 def dReLU(x):
     return 1. * (x > 0)
+
+def softmax(x):
+    return np.exp(x) / np.sum(np.exp(x), axis=0)
+
+def zero_pad(X, pad):
+    X_pad = np.pad(X, ((0, 0), (pad, pad), (pad, pad), (0,0)))
+    return X_pad
+
 
 class LayerConvolution:
     def __init__(self, dim_input, num_filters, dim_filters, stride, padding):
