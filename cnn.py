@@ -54,16 +54,16 @@ class LayerConvolution:
         weights = np.random.randn(self.num_filters, dim_input[-1], *self.dim_filters)
         biases = np.random.rand(self.num_filters,1)
 
-        self.dim_output = (dim_input[:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
-        self.dim_output = self.dim_output.astype(int)
-        output = np.zeros((num_neurons, *self.dim_output, self.num_filters))
-        output = output.reshape((num_neurons, np.prod(self.dim_output), self.num_filters))
+        dim_output = (dim_input[:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
+        dim_output = dim_output.astype(int)
+        output = np.zeros((num_neurons, *dim_output, self.num_filters))
+        output = output.reshape((num_neurons, np.prod(dim_output), self.num_filters))
 
         for k in range(num_neurons):
             for j in range(self.num_filters):
                 col = 0
                 row = 0
-                for i in range(np.prod(self.dim_output)):
+                for i in range(np.prod(dim_output)):
                     output[k][i][j] = np.sum(
                         np.multiply(input_neurons[k,
                                                   row:self.dim_filters[0]+row,
@@ -73,7 +73,7 @@ class LayerConvolution:
                     if col + self.dim_filters[0] > dim_input[1]:
                         col = 0
                         row += self.stride
-        output = output.reshape((num_neurons, *self.dim_output, self.num_filters))
+        output = output.reshape((num_neurons, *dim_output, self.num_filters))
         return output
 
 
@@ -82,22 +82,22 @@ class LayerMaxPooling:
         self.dim_filters = dim_filters.astype(int)
         self.stride = stride
 
-        self.dim_output = (dim_input[:-1] - self.dim_filters) / self.stride + 1
-        self.dim_output = self.dim_output.astype(int)
-
     def forward(self, input_neurons):
         print(input_neurons.shape)
         num_neurons = input_neurons.shape[0]
         dim_input = input_neurons.shape[1:]
 
-        output = np.zeros((num_neurons, *self.dim_output, dim_input[-1]))
-        output = output.reshape((num_neurons, np.prod(self.dim_output), dim_input[-1]))
+        dim_output = (dim_input[:-1] - self.dim_filters) / self.stride + 1
+        dim_output = dim_output.astype(int)
+
+        output = np.zeros((num_neurons, *dim_output, dim_input[-1]))
+        output = output.reshape((num_neurons, np.prod(dim_output), dim_input[-1]))
 
         for k in range(num_neurons):
             for j in range(dim_input[-1]):
                 row = 0
                 col = 0
-                for i in range(np.prod(self.dim_output)):
+                for i in range(np.prod(dim_output)):
                     slide = input_neurons[k, row:self.dim_filters[0]+row,
                                           col:self.dim_filters[0]+col, j]
                     output[k][i][j] = np.amax(slide)
@@ -105,7 +105,7 @@ class LayerMaxPooling:
                     if col + self.dim_filters[1] > dim_input[1]:
                         col = 0
                         row += self.dim_filters[0]
-        output = output.reshape((num_neurons, *self.dim_output, dim_input[-1]))
+        output = output.reshape((num_neurons, *dim_output, dim_input[-1]))
         return output
 
 
