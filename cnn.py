@@ -126,6 +126,14 @@ class LayerFlatten:
         self.shape = shape
         return output
 
+class Softmax:
+    def __init__(self):
+        pass
+    def forward(self, input_data):
+        x = input_data - np.max(input_data, axis=1, keepdims=True)
+        e = np.exp(x)
+        p = e / np.sum(e, axis=1, keepdims=True)
+        return p
 
 
 
@@ -141,3 +149,5 @@ if __name__ == "__main__":
     o3 = l3.forward(o2)
     l4 = LayerFlatten()
     o4 = l4.forward(o3)
+    l5 = Softmax()
+    o5 = l5.forward(o4)
