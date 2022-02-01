@@ -28,15 +28,6 @@ def zero_pad(X, pad):
 
 
 
-
-class LayerFlattening:
-    def __init__(self, dim_input):
-        self.dim_input = dim_input.astype(int)
-
-    def forward(self, input_data):
-        output = np.ravel(input_data)
-
-
 class LayerConvolution:
     def __init__(self, num_filters, dim_filters, stride, padding):
         self.num_filters = num_filters
@@ -126,6 +117,16 @@ class LayerFullyConnected:
         return output
 
 
+class LayerFlatten:
+    def __init__(self):
+        self.shape = ()
+    def forward(self, input_data):
+        shape = input_data.shape
+        output = np.ravel(input_data).reshape(shape[0], -1)
+        self.shape = shape
+        return output
+
+
 
 
 if __name__ == "__main__":
@@ -138,3 +139,5 @@ if __name__ == "__main__":
     o2 = l2.forward(o1)
     l3 = LayerFullyConnected(10)
     o3 = l3.forward(o2)
+    l4 = LayerFlatten()
+    o4 = l4.forward(o3)
