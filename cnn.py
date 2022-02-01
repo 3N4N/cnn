@@ -1,4 +1,3 @@
-from tensorflow.keras import datasets
 import numpy as np
 
 from tensorflow.keras import datasets
@@ -26,42 +25,6 @@ def zero_pad(X, pad):
     return X_pad
 
 
-class LayerConvolution:
-    def __init__(self, dim_input, num_filters, dim_filters, stride, padding):
-        self.dim_input = dim_input.astype(int)
-        self.num_filters = num_filters
-        self.dim_filters = dim_filters.astype(int)
-        self.stride = stride
-        self.padding = padding
-
-        self.weights = np.random.randn(self.num_filters, self.dim_input[2], *self.dim_filters)
-        self.biases = np.random.rand(self.num_filters,1)
-
-        self.dim_output = (self.dim_input[:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
-        self.dim_output = self.dim_output.astype(int)
-        self.output = np.zeros((*self.dim_output, self.num_filters))
-
-    def forward(self, input_neurons):
-        input_neurons = zero_pad(input_neurons, self.padding)
-        print(input_neurons.shape)
-        self.output = self.output.reshape((np.prod(self.dim_output), self.num_filters))
-        for j in range(self.num_filters):
-            col = 0
-            row = 0
-            print("Filter no.", j)
-            for i in range(self.output.shape[0]):
-                self.output[i][j] = np.sum(
-                    np.multiply(input_neurons[:,
-                                              row:self.dim_filters[0]+row,
-                                              col:self.dim_filters[1]+col,
-                                              :], self.weights[j])) + self.biases[j]
-                col += self.stride
-                if col + self.dim_filters[0] > self.dim_input[1]:
-                    col = 0
-                    row += self.stride
-        self.output = self.output.reshape((*self.dim_output, self.num_filters))
-        return self.output
-
 
 
 class LayerMaxPooling:
@@ -72,22 +35,22 @@ class LayerMaxPooling:
 
         self.dim_output = (self.dim_input[:-1] - self.dim_filters) / self.stride + 1
         self.dim_output = self.dim_output.astype(int)
-        self.output = np.zeros((*self.dim_output, self.dim_input[:-1]))
+        output = np.zeros((*self.dim_output, self.dim_input[:-1]))
 
     def forward(self, input_image):
-        self.output = self.output.reshape((np.prod(self.dim_output), self.dim_input[:-1]))
+        output = output.reshape((np.prod(self.dim_output), self.dim_input[:-1]))
         for j in range(self.dim_input[2]):
             row = 0
             col = 0
-            for i in range(self.output.shape[0]):
+            for i in range(output.shape[0]):
                 slide = input_image[row:self.dim_filters[0]+row,
                                      col:self.dim_filters[0]+col][j]
-                self.output[i][j] = np.amax(slide)
+                output[i][j] = np.amax(slide)
                 col += self.dim_filters[1]
                 if col + dim_filters[1] > self.dim_input[1]:
                     col = 0
                     row += self.dim_filters[0]
-        self.output = self.output.reshape((*self.dim_output, self.dim_input[:-1]))
+        output = output.reshape((*self.dim_output, self.dim_input[:-1]))
 
 
 class LayerFullyConnected:
@@ -104,7 +67,7 @@ class LayerFullyConnected:
     def forward(self, input_data):
         self.weights = self.weights.reshape((self.dim_output, np.prod(self.dim_input)))
         self.input_data = input_data.reshape((np.prod(dim_input), 1))
-        self.output = np.dot(self.weights, input_data) + self.biases
+        output = np.dot(self.weights, input_data) + self.biases
 
 class LayerFlattening:
     def __init__(self, dim_input):
@@ -114,10 +77,48 @@ class LayerFlattening:
         output = np.ravel(input_data)
 
 
+class LayerConvolution:
+    def __init__(self, dim_input, num_filters, dim_filters, stride, padding):
+        self.dim_input = dim_input.astype(int)
+        self.num_filters = num_filters
+        self.dim_filters = dim_filters.astype(int)
+        self.stride = stride
+        self.padding = padding
+
+        self.weights = np.random.randn(self.num_filters, self.dim_input[2], *self.dim_filters)
+        self.biases = np.random.rand(self.num_filters,1)
+
+        self.dim_output = (self.dim_input[1:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
+        self.dim_output = self.dim_output.astype(int)
+
+    def forward(self, input_neurons):
+        input_neurons = zero_pad(input_neurons, self.padding)
+        print(input_neurons.shape)
+        num_images = input_neurons.shape[0]
+        output = np.zeros((num_images, *self.dim_output, self.num_filters))
+        output = output.reshape((num_images, np.prod(self.dim_output), self.num_filters))
+        for k in range(num_images):
+            for j in range(self.num_filters):
+                col = 0
+                row = 0
+                for i in range(np.prod(self.dim_output)):
+                    output[k][i][j] = np.sum(
+                        np.multiply(input_neurons[k,
+                                                  row:self.dim_filters[0]+row,
+                                                  col:self.dim_filters[1]+col,
+                                                  :], self.weights[j])) + self.biases[j]
+                    col += self.stride
+                    if col + self.dim_filters[0] > self.dim_input[1]:
+                        col = 0
+                        row += self.stride
+        output = output.reshape((num_images, *self.dim_output, self.num_filters))
+        return output
+
+
 
 if __name__ == "__main__":
     x_train, y_train, x_valid, y_valid, x_test, y_test = load_mnist()
     dim_input = np.append(np.array(x_train[0].shape), 1)
-    layer1 = LayerConvolution(dim_input, 6, np.array((5,5)), 1, 2)
     z = np.expand_dims(x_train, 3)
+    layer1 = LayerConvolution(dim_input, 6, np.array((5,5)), 1, 2)
     o = layer1.forward(z[:1000])
