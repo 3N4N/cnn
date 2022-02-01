@@ -51,8 +51,8 @@ class LayerConvolution:
         dim_input = input_neurons.shape[1:]
         input_neurons = zero_pad(input_neurons, self.padding)
 
-        self.weights = np.random.randn(self.num_filters, dim_input[-1], *self.dim_filters)
-        self.biases = np.random.rand(self.num_filters,1)
+        weights = np.random.randn(self.num_filters, dim_input[-1], *self.dim_filters)
+        biases = np.random.rand(self.num_filters,1)
 
         self.dim_output = (dim_input[:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
         self.dim_output = self.dim_output.astype(int)
@@ -68,7 +68,7 @@ class LayerConvolution:
                         np.multiply(input_neurons[k,
                                                   row:self.dim_filters[0]+row,
                                                   col:self.dim_filters[1]+col,
-                                                  :], self.weights[j])) + self.biases[j]
+                                                  :], weights[j])) + biases[j]
                     col += self.stride
                     if col + self.dim_filters[0] > dim_input[1]:
                         col = 0
@@ -114,11 +114,15 @@ class LayerFullyConnected:
         self.num_output = num_output
 
     def forward(self, input_neurons):
-        self.weights = np.random.randn(self.num_output, *self.dim_input)
-        self.biases = np.random.randn(self.num_output,1)
-        self.weights = self.weights.reshape((self.num_output, np.prod(self.dim_input)))
-        self.input_neurons = input_neurons.reshape((np.prod(self.dim_input), 1))
-        output = np.dot(self.weights, input_neurons) + self.biases
+        print(input_neurons.shape)
+        num_neurons = input_neurons.shape[0]
+        dim_input = input_neurons.shape[1:]
+
+        weights = np.random.randn(np.prod(dim_input), self.num_output)
+        biases = np.random.randn(self.num_output,)
+        input_neurons = input_neurons.reshape(num_neurons, -1)
+        print(input_neurons.shape)
+        output = np.dot(input_neurons, weights) + biases
         return output
 
 
@@ -129,7 +133,7 @@ if __name__ == "__main__":
     dim_image = tuple(np.append(np.array(x_train[0].shape), 1))
     z = np.expand_dims(x_train, 3)
     l1 = LayerConvolution(6, np.array((5,5)), 1, 2)
-    o1 = l1.forward(z[:100])
+    o1 = l1.forward(z[:32])
     l2 = LayerMaxPooling(np.array((2,2)), 2)
     o2 = l2.forward(o1)
     l3 = LayerFullyConnected(10)
