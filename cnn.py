@@ -67,6 +67,61 @@ class LayerConvolution:
         return output
 
 
+class LayerMaxPooling:
+    def __init__(self, dim_filters, stride):
+        self.dim_filters = dim_filters.astype(int)
+        self.stride = stride
+        self.neurons = None
+
+    def forward(self, input_neurons):
+        print(input_neurons.shape)
+        self.neurons = input_neurons
+        num_neurons = input_neurons.shape[0]
+        dim_input = input_neurons.shape[1:]
+
+        dim_output = (dim_input[:-1] - self.dim_filters) / self.stride + 1
+        dim_output = dim_output.astype(int)
+
+        output = np.zeros((num_neurons, *dim_output, dim_input[-1]))
+
+        for n in range(num_neurons):
+            for h in range(dim_output[0]):
+                for w in range(dim_output[1]):
+                    row = h * self.stride
+                    col = w * self.stride
+                    for c in range(dim_input[-1]):
+                        slide = input_neurons[
+                            n, row: row+self.dim_filters[0], col: col+self.dim_filters[1], c
+                        ]
+                        output[n, h, w, c] = np.mean(slide)
+        return output
+
+    def create_mask(self, x):
+        return x == np.max(x)
+
+    def backward(self, din):
+        num_neurons = self.neurons.shape[0]
+        dim_input = self.neurons.shape[1:]
+
+        dout = np.zeros_like(self.neurons)
+
+        for n in range(num_neurons):
+            for h in range(din.shape[1]):
+                for w in range(din.shape[2]):
+                    row = h * self.stride
+                    col = w * self.stride
+                    for c in range(din.shape[-1]):
+                        slide = self.neurons[
+                            n, row: row+self.dim_filters[0],
+                            col: col+self.dim_filters[1], c
+                        ]
+                        mask = self.create_mask(slide)
+                        dout[
+                            n, row: row+self.dim_filters[0],
+                            col: col+self.dim_filters[1], c
+                        ] += din[n, h, w, c] * mask
+        return dout
+
 
 class LayerFullyConnected:
     def __init__(self, num_output):
@@ -134,37 +189,6 @@ class Softmax:
         return dscores
 
 
-class LayerMaxPooling:
-    def __init__(self, dim_filters, stride):
-        self.dim_filters = dim_filters.astype(int)
-        self.stride = stride
-        self.neurons = None
-
-    def forward(self, input_neurons):
-        print(input_neurons.shape)
-        self.neurons = input_neurons
-        num_neurons = input_neurons.shape[0]
-        dim_input = input_neurons.shape[1:]
-
-        dim_output = (dim_input[:-1] - self.dim_filters) / self.stride + 1
-        dim_output = dim_output.astype(int)
-
-        output = np.zeros((num_neurons, *dim_output, dim_input[-1]))
-
-        for n in range(num_neurons):
-            for h in range(dim_output[0]):
-                for w in range(dim_output[1]):
-                    row = h * self.stride
-                    col = w * self.stride
-                    for c in range(dim_input[-1]):
-                        slide = input_neurons[
-                            n, row: row+self.dim_filters[0], col: col+self.dim_filters[1], c
-                        ]
-                        output[n, h, w, c] = np.mean(slide)
-        return output
-
-    def backward(self, X):
-
 
 
 if __name__ == "__main__":
@@ -186,3 +210,4 @@ if __name__ == "__main__":
     b5 = l5.backward(f5, y_train[N])
     b4 = l4.backward(b5)
     b3, w3, a3 = l3.backward(b4)
+    b2 = l2.backward(b3)
