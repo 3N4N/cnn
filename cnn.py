@@ -127,6 +127,9 @@ class LayerFlatten:
         output = np.ravel(input_data).reshape(shape[0], -1)
         self.shape = shape
         return output
+    def backward(self, input_data):
+        return input_data.reshape(self.shape)
+
 
 class Softmax:
     def __init__(self):
@@ -152,11 +155,12 @@ class Softmax:
 
 
 if __name__ == "__main__":
+    N = 32
     x_train, y_train, x_valid, y_valid, x_test, y_test = load_mnist()
     dim_image = tuple(np.append(np.array(x_train[0].shape), 1))
     z = np.expand_dims(x_train, 3)
     l1 = LayerConvolution(6, np.array((5,5)), 1, 2)
-    f1 = l1.forward(z[:32])
+    f1 = l1.forward(z[:N])
     l2 = LayerMaxPooling(np.array((2,2)), 2)
     f2 = l2.forward(f1)
     l3 = LayerFullyConnected(10)
@@ -165,5 +169,6 @@ if __name__ == "__main__":
     f4 = l4.forward(f3)
     l5 = Softmax()
     f5 = l5.forward(f4)
-    loss = l5.loss(f5, y_train[32])
-    b5 = l5.backward(f5, y_train[32])
+    loss = l5.loss(f5, y_train[N])
+    b5 = l5.backward(f5, y_train[N])
+    b4 = l4.backward(b5)
