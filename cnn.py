@@ -5,6 +5,8 @@ from tensorflow.keras import datasets
 
 def load_mnist():
     (x_train, y_train), (x_eval, y_eval) = datasets.mnist.load_data()
+    x_train = x_train.astype(float) / 255
+    x_eval  = x_eval.astype(float)  / 255
     x_valid = x_eval[:5000, :, :]
     y_valid = y_eval[:5000]
     x_test = x_eval[5000:, :, :]
@@ -134,6 +136,18 @@ class Softmax:
         e = np.exp(x)
         p = e / np.sum(e, axis=1, keepdims=True)
         return p
+    def loss(self, probs, y, epsilon=1e-8):
+        N = probs.shape[0]
+        probs = np.clip(probs, epsilon, 1. - epsilon)
+        correct_logprobs = -np.log(probs[range(N),y])
+        loss = np.sum(correct_logprobs) / N
+        return loss
+    def backward(self, probs, y):
+        N = probs.shape[0]
+        dscores = probs.copy()
+        dscores[np.arange(N), y] -= 1
+        dscores /= N
+        return dscores
 
 
 
@@ -142,12 +156,14 @@ if __name__ == "__main__":
     dim_image = tuple(np.append(np.array(x_train[0].shape), 1))
     z = np.expand_dims(x_train, 3)
     l1 = LayerConvolution(6, np.array((5,5)), 1, 2)
-    o1 = l1.forward(z[:32])
+    f1 = l1.forward(z[:32])
     l2 = LayerMaxPooling(np.array((2,2)), 2)
-    o2 = l2.forward(o1)
+    f2 = l2.forward(f1)
     l3 = LayerFullyConnected(10)
-    o3 = l3.forward(o2)
+    f3 = l3.forward(f2)
     l4 = LayerFlatten()
-    o4 = l4.forward(o3)
+    f4 = l4.forward(f3)
     l5 = Softmax()
-    o5 = l5.forward(o4)
+    f5 = l5.forward(f4)
+    loss = l5.loss(f5, y_train[32])
+    b5 = l5.backward(f5, y_train[32])
