@@ -105,18 +105,33 @@ class LayerMaxPooling:
 class LayerFullyConnected:
     def __init__(self, num_output):
         self.num_output = num_output
+        self.weights = None
+        self.biases = None
+        self.neurons = None
 
     def forward(self, input_neurons):
+        self.neurons = input_neurons
         print(input_neurons.shape)
         num_neurons = input_neurons.shape[0]
         dim_input = input_neurons.shape[1:]
 
-        weights = np.random.randn(np.prod(dim_input), self.num_output)
-        biases = np.random.randn(self.num_output,)
+        self.weights = np.random.randn(np.prod(dim_input), self.num_output)
+        self.biases = np.random.randn(self.num_output,)
         input_neurons = input_neurons.reshape(num_neurons, -1)
         print(input_neurons.shape)
-        output = np.dot(input_neurons, weights) + biases
+        output = np.dot(input_neurons, self.weights) + self.biases
         return output
+
+    def backward(self, input_data):
+        N = self.neurons.shape[0]
+        x = self.neurons.reshape(N, -1)
+
+        dx = np.dot(input_data, self.weights.T).reshape(self.neurons.shape)
+        dw = np.dot(x.T, input_data)
+        db = np.sum(input_data.T, axis=1)
+
+        return dx, dw, db
+
 
 
 class LayerFlatten:
@@ -172,3 +187,4 @@ if __name__ == "__main__":
     loss = l5.loss(f5, y_train[N])
     b5 = l5.backward(f5, y_train[N])
     b4 = l4.backward(b5)
+    b3, w3, a3 = l3.backward(b4)
