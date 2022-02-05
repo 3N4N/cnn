@@ -56,13 +56,10 @@ class LayerConvolution:
         for n in range(num_neurons):
             for h in range(dim_output[0]):
                 for w in range(dim_output[1]):
-                    row = h * self.stride
-                    col = w * self.stride
+                    rows = slice(h * self.stride, h * self.stride + self.dim_filters[0])
+                    cols = slice(w * self.stride, w * self.stride + self.dim_filters[1])
                     for c in range(self.num_filters):
-                        slide = neurons_padded[
-                            n, row:row+self.dim_filters[0],
-                            col:col+self.dim_filters[1], :
-                        ]
+                        slide = neurons_padded[n, rows, cols, :]
                         output[n, h, w, c] = np.sum(slide * self.weights[c,:,:,:]) \
                             + self.biases[c]
         return output
@@ -118,12 +115,10 @@ class LayerMaxPooling:
         for n in range(num_neurons):
             for h in range(dim_output[0]):
                 for w in range(dim_output[1]):
-                    row = h * self.stride
-                    col = w * self.stride
+                    rows = slice(h * self.stride, h * self.stride + self.dim_filters[0])
+                    cols = slice(w * self.stride, w * self.stride + self.dim_filters[1])
                     for c in range(dim_input[-1]):
-                        slide = input_neurons[
-                            n, row: row+self.dim_filters[0], col: col+self.dim_filters[1], c
-                        ]
+                        slide = input_neurons[n, rows, cols, c]
                         output[n, h, w, c] = np.max(slide)
         return output
 
@@ -137,18 +132,12 @@ class LayerMaxPooling:
         for n in range(num_neurons):
             for h in range(din.shape[1]):
                 for w in range(din.shape[2]):
-                    row = h * self.stride
-                    col = w * self.stride
+                    rows = slice(h * self.stride, h * self.stride + self.dim_filters[0])
+                    cols = slice(w * self.stride, w * self.stride + self.dim_filters[1])
                     for c in range(din.shape[-1]):
-                        slide = self.neurons[
-                            n, row: row+self.dim_filters[0],
-                            col: col+self.dim_filters[1], c
-                        ]
+                        slide = self.neurons[n, rows, cols, c]
                         mask = self.create_mask(slide)
-                        dout[
-                            n, row: row+self.dim_filters[0],
-                            col: col+self.dim_filters[1], c
-                        ] += din[n, h, w, c] * mask
+                        dout[n, rows, cols, c] += din[n, h, w, c] * mask
         return dout
 
 
