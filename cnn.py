@@ -27,45 +27,6 @@ def zero_pad(X, pad):
 
 
 
-class LayerConvolution:
-    def __init__(self, num_filters, dim_filters, stride, padding):
-        self.num_filters = num_filters
-        self.dim_filters = dim_filters.astype(int)
-        self.stride = stride
-        self.padding = padding
-
-
-    def forward(self, input_neurons):
-        print(input_neurons.shape)
-        num_neurons = input_neurons.shape[0]
-        dim_input = input_neurons.shape[1:]
-        input_neurons = zero_pad(input_neurons, self.padding)
-
-        weights = np.random.randn(self.num_filters, dim_input[-1], *self.dim_filters)
-        biases = np.random.rand(self.num_filters,1)
-
-        dim_output = (dim_input[:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
-        dim_output = dim_output.astype(int)
-        output = np.zeros((num_neurons, *dim_output, self.num_filters))
-        output = output.reshape((num_neurons, np.prod(dim_output), self.num_filters))
-
-        for k in range(num_neurons):
-            for j in range(self.num_filters):
-                col = 0
-                row = 0
-                for i in range(np.prod(dim_output)):
-                    output[k][i][j] = np.sum(
-                        np.multiply(input_neurons[k,
-                                                  row:self.dim_filters[0]+row,
-                                                  col:self.dim_filters[1]+col,
-                                                  :], weights[j])) + biases[j]
-                    col += self.stride
-                    if col + self.dim_filters[0] > dim_input[1]:
-                        col = 0
-                        row += self.stride
-        output = output.reshape((num_neurons, *dim_output, self.num_filters))
-        return output
-
 
 class LayerMaxPooling:
     def __init__(self, dim_filters, stride):
@@ -93,7 +54,7 @@ class LayerMaxPooling:
                         slide = input_neurons[
                             n, row: row+self.dim_filters[0], col: col+self.dim_filters[1], c
                         ]
-                        output[n, h, w, c] = np.mean(slide)
+                        output[n, h, w, c] = np.max(slide)
         return output
 
     def create_mask(self, x):
@@ -187,6 +148,48 @@ class Softmax:
         dscores[np.arange(N), y] -= 1
         dscores /= N
         return dscores
+
+
+
+class LayerConvolution:
+    def __init__(self, num_filters, dim_filters, stride, padding):
+        self.num_filters = num_filters
+        self.dim_filters = dim_filters.astype(int)
+        self.stride = stride
+        self.padding = padding
+        self.neurons = None
+        self.weights = None
+        self.biases = None
+
+
+    def forward(self, input_neurons):
+        print(input_neurons.shape)
+        self.neurons = input_neurons
+        num_neurons = input_neurons.shape[0]
+        dim_input = input_neurons.shape[1:]
+        input_neurons = zero_pad(input_neurons, self.padding)
+
+        self.weights = np.random.randn(self.num_filters, *self.dim_filters, dim_input[-1])
+        self.biases = np.random.rand(self.num_filters,1)
+
+        dim_output = (dim_input[:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
+        dim_output = dim_output.astype(int)
+        output = np.zeros((num_neurons, *dim_output, self.num_filters))
+        print(output.shape)
+
+        for n in range(num_neurons):
+            for h in range(dim_output[0]):
+                for w in range(dim_output[1]):
+                    row = h * self.stride
+                    col = w * self.stride
+                    for c in range(self.num_filters):
+                        slide = input_neurons[
+                            n, row:row+self.dim_filters[0],
+                            col:col+self.dim_filters[1], :
+                        ]
+                        output[n, h, w, c] = np.sum(slide * self.weights[c,:,:,:]) \
+                            + self.biases[c]
+        return output
 
 
 
