@@ -27,6 +27,76 @@ def zero_pad(X, pad):
 
 
 
+class LayerConvolution:
+    def __init__(self, num_filters, dim_filters, stride, padding):
+        self.num_filters = num_filters
+        self.dim_filters = dim_filters.astype(int)
+        self.stride = stride
+        self.padding = padding
+        self.neurons = None
+        self.weights = None
+        self.biases = None
+
+
+    def forward(self, input_neurons):
+        print(input_neurons.shape)
+        self.neurons = input_neurons
+        num_neurons = input_neurons.shape[0]
+        dim_input = input_neurons.shape[1:]
+        neurons_padded = zero_pad(input_neurons, self.padding)
+
+        self.weights = np.random.randn(self.num_filters, *self.dim_filters, dim_input[-1])
+        self.biases = np.random.rand(self.num_filters,1)
+
+        dim_output = (dim_input[:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
+        dim_output = dim_output.astype(int)
+        output = np.zeros((num_neurons, *dim_output, self.num_filters))
+        print(output.shape)
+
+        for n in range(num_neurons):
+            for h in range(dim_output[0]):
+                for w in range(dim_output[1]):
+                    row = h * self.stride
+                    col = w * self.stride
+                    for c in range(self.num_filters):
+                        slide = neurons_padded[
+                            n, row:row+self.dim_filters[0],
+                            col:col+self.dim_filters[1], :
+                        ]
+                        output[n, h, w, c] = np.sum(slide * self.weights[c,:,:,:]) \
+                            + self.biases[c]
+        return output
+
+    def backward(self, din):
+        num_neurons = self.neurons.shape[0]
+        dim_neurons = self.neurons.shape[1:]
+
+        dout = np.zeros_like(self.neurons)
+        print(dout.shape)
+        neurons_padded = zero_pad(self.neurons, self.padding)
+        dout_padded = zero_pad(dout, self.padding)
+
+        dw = np.zeros_like(self.weights)
+        db = np.zeros_like(self.biases)
+
+        for n in range(num_neurons):
+            for h in range(dim_neurons[0]):
+                for w in range(dim_neurons[0]):
+                    rows = slice(h * self.stride, h * self.stride + self.dim_filters[0])
+                    cols = slice(w * self.stride, w * self.stride + self.dim_filters[1])
+
+                    for c in range(self.num_filters):
+                        slide = neurons_padded[n, rows, cols, :]
+                        dout_padded[n, rows, cols, :] += self.weights[c,:,:,:] * din[n,h,w,c]
+                        dw[c,:,:,:] += slide * din[n,h,w,c]
+                        db[c] += din[n,h,w,c]
+
+            dout[n,:,:,:] = dout_padded[n, self.padding:-self.padding, self.padding:-self.padding, :]
+            self.weights = dw
+            self.biases = db
+        return dout
+
+
 
 class LayerMaxPooling:
     def __init__(self, dim_filters, stride):
@@ -62,8 +132,6 @@ class LayerMaxPooling:
 
     def backward(self, din):
         num_neurons = self.neurons.shape[0]
-        dim_input = self.neurons.shape[1:]
-
         dout = np.zeros_like(self.neurons)
 
         for n in range(num_neurons):
@@ -151,51 +219,10 @@ class Softmax:
 
 
 
-class LayerConvolution:
-    def __init__(self, num_filters, dim_filters, stride, padding):
-        self.num_filters = num_filters
-        self.dim_filters = dim_filters.astype(int)
-        self.stride = stride
-        self.padding = padding
-        self.neurons = None
-        self.weights = None
-        self.biases = None
-
-
-    def forward(self, input_neurons):
-        print(input_neurons.shape)
-        self.neurons = input_neurons
-        num_neurons = input_neurons.shape[0]
-        dim_input = input_neurons.shape[1:]
-        input_neurons = zero_pad(input_neurons, self.padding)
-
-        self.weights = np.random.randn(self.num_filters, *self.dim_filters, dim_input[-1])
-        self.biases = np.random.rand(self.num_filters,1)
-
-        dim_output = (dim_input[:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
-        dim_output = dim_output.astype(int)
-        output = np.zeros((num_neurons, *dim_output, self.num_filters))
-        print(output.shape)
-
-        for n in range(num_neurons):
-            for h in range(dim_output[0]):
-                for w in range(dim_output[1]):
-                    row = h * self.stride
-                    col = w * self.stride
-                    for c in range(self.num_filters):
-                        slide = input_neurons[
-                            n, row:row+self.dim_filters[0],
-                            col:col+self.dim_filters[1], :
-                        ]
-                        output[n, h, w, c] = np.sum(slide * self.weights[c,:,:,:]) \
-                            + self.biases[c]
-        return output
-
-
 
 
 if __name__ == "__main__":
-    N = 32
+    N = 8
     x_train, y_train, x_valid, y_valid, x_test, y_test = load_mnist()
     dim_image = tuple(np.append(np.array(x_train[0].shape), 1))
     z = np.expand_dims(x_train, 3)
@@ -214,3 +241,4 @@ if __name__ == "__main__":
     b4 = l4.backward(b5)
     b3, w3, a3 = l3.backward(b4)
     b2 = l2.backward(b3)
+    b1 = l1.backward(b2)
