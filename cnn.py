@@ -24,6 +24,14 @@ def zero_pad(X, pad):
     return X_pad
 
 
+class LayerReLU:
+    def __init__(self):
+        self.neurons = None
+    def forward(self, x):
+        self.neurons = x
+        return np.maximum(x, 0)
+    def backward(self, dout):
+        return dout * (self.neurons > 0)
 
 
 
@@ -60,8 +68,7 @@ class LayerConvolution:
                     cols = slice(w * self.stride, w * self.stride + self.dim_filters[1])
                     for c in range(self.num_filters):
                         slide = neurons_padded[n, rows, cols, :]
-                        output[n, h, w, c] = np.sum(slide * self.weights[c,:,:,:]) \
-                            + self.biases[c]
+                        output[n, h, w, c] = np.sum(slide * self.weights[c,:,:,:]) + self.biases[c]
         return output
 
     def backward(self, din):
@@ -169,6 +176,9 @@ class LayerFullyConnected:
         dw = np.dot(x.T, input_data)
         db = np.sum(input_data.T, axis=1)
 
+        self.weights = dw
+        self.biases = db
+
         return dx, dw, db
 
 
@@ -187,18 +197,14 @@ class LayerFlatten:
 
 class Softmax:
     def __init__(self):
+        self.neurons = None
         pass
     def forward(self, input_data):
+        self.neurons = input_data
         x = input_data - np.max(input_data, axis=1, keepdims=True)
         e = np.exp(x)
         p = e / np.sum(e, axis=1, keepdims=True)
         return p
-    def loss(self, probs, y, epsilon=1e-8):
-        N = probs.shape[0]
-        probs = np.clip(probs, epsilon, 1. - epsilon)
-        correct_logprobs = -np.log(probs[range(N),y])
-        loss = np.sum(correct_logprobs) / N
-        return loss
     def backward(self, probs, y):
         N = probs.shape[0]
         dscores = probs.copy()
@@ -206,6 +212,12 @@ class Softmax:
         dscores /= N
         return dscores
 
+def loss(y, probs, epsilon=1e-8):
+    N = probs.shape[0]
+    # probs = np.clip(probs, epsilon, 1. - epsilon)
+    logprobs = -np.log(probs[range(N),y])
+    loss = np.sum(logprobs) / N
+    return loss
 
 
 
