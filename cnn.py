@@ -3,6 +3,10 @@ from tqdm.auto import tqdm
 from tensorflow.keras import datasets
 
 
+def dbgprn(text):
+    print("- [DBG]", text)
+    return
+
 def load_mnist():
     (x_train, y_train), (x_eval, y_eval) = datasets.mnist.load_data()
     x_train = x_train.astype(float) / 255
@@ -15,6 +19,18 @@ def load_mnist():
     x_test = np.expand_dims(x_test, axis=3)
     x_valid = np.expand_dims(x_valid, axis=3)
     return x_train, y_train, x_valid, y_valid, x_test, y_test
+
+def load_cifar():
+    # cp cifar-10-batches-py.tar.gz ~/.keras/datasets/
+    (x_train, y_train), (x_eval, y_eval) = datasets.cifar10.load_data()
+    x_train = x_train.astype(float) / 255
+    x_eval  = x_eval.astype(float)  / 255
+    x_valid = x_eval[:5000, :, :]
+    y_valid = y_eval[:5000]
+    x_test = x_eval[5000:, :, :]
+    y_test = y_eval[5000:]
+    return x_train, y_train, x_valid, y_valid, x_test, y_test
+
 
 def ReLU(x):
     return x * (x > 0)
@@ -50,12 +66,12 @@ class LayerConvolution:
         self.weights = None
         self.biases = None
 
-
     def forward(self, input_neurons):
         # print(input_neurons.shape)
         self.neurons = input_neurons
         num_neurons = input_neurons.shape[0]
         dim_input = input_neurons.shape[1:]
+        # dbgprn(input_neurons.shape)
         neurons_padded = zero_pad(input_neurons, self.padding)
 
         self.weights = np.random.randn(self.num_filters, *self.dim_filters, dim_input[-1]) * 0.00004
@@ -201,22 +217,6 @@ class LayerFlatten:
         return input_data.reshape(self.shape)
 
 
-class Softmax:
-    def __init__(self):
-        pass
-    def forward(self, input_data):
-        x = input_data - np.max(input_data, axis=1, keepdims=True)
-        e = np.exp(x)
-        p = e / np.sum(e, axis=1, keepdims=True)
-        return p
-    def backward(self, probs, y):
-        N = probs.shape[0]
-        grad = probs.copy()
-        grad[np.arange(N), y] -= 1
-        grad /= N
-        return grad
-
-
 
 def loss(y, yhat, epsilon=1e-8):
     N = yhat.shape[0]
@@ -299,11 +299,10 @@ class ConvNet:
         out = self.forward(x)
         yhat = softmax(out)
 
-
-if __name__ == "__main__":
-    N = 8
+def model_mnist(N=None):
     x_train, y_train, x_valid, y_valid, x_test, y_test = load_mnist()
-    dim_image = x_train.shape
+    if N is None:
+        N = x_train.shape[0]
 
     cnn = ConvNet()
     cnn.addlayer(LayerConvolution(6, np.array((5,5)), 1, 2))
@@ -315,5 +314,25 @@ if __name__ == "__main__":
     cnn.addlayer(LayerConvolution(100, np.array((5,5)), 1, 0))
     cnn.addlayer(LayerReLU())
     cnn.addlayer(LayerDense(10))
-    # losses = cnn.train(x_train[:N], y_train[:N], epochs=1)
-    losses = cnn.train(x_train, y_train, epochs=3)
+    losses = cnn.train(x_train[:N], y_train[:N], epochs=1)
+
+def model_cifar(N=None):
+    x_train, y_train, x_valid, y_valid, x_test, y_test = load_cifar()
+    if N is None:
+        N = x_train.shape[0]
+
+    cnn = ConvNet()
+    cnn.addlayer(LayerConvolution(6, np.array((5,5)), 1, 2))
+    cnn.addlayer(LayerReLU())
+    cnn.addlayer(LayerMaxPooling(np.array((2,2)), 2))
+    cnn.addlayer(LayerConvolution(12, np.array((5,5)), 1, 0))
+    cnn.addlayer(LayerReLU())
+    cnn.addlayer(LayerMaxPooling(np.array((2,2)), 2))
+    cnn.addlayer(LayerConvolution(100, np.array((5,5)), 1, 0))
+    cnn.addlayer(LayerReLU())
+    cnn.addlayer(LayerDense(10))
+    losses = cnn.train(x_train[:N], y_train[:N], epochs=1)
+
+if __name__ == "__main__":
+    # model_mnist(N=8)
+    model_cifar(N=8)
