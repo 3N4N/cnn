@@ -3,6 +3,7 @@ import numpy as np
 from tqdm.auto import tqdm
 from tensorflow.keras import datasets
 from sklearn import metrics
+import pickle
 
 
 tqdmcols = 80
@@ -298,6 +299,7 @@ class ConvNet:
         batches = self.create_batches(x_train, y_train, batch_size)
         losses = []
         validation_scores = []
+
         for epoch in tqdm(range(epochs), ncols=tqdmcols):
             for batch in tqdm(batches, leave=False, ncols=tqdmcols):
                 x_batch, y_batch = batch
@@ -307,9 +309,15 @@ class ConvNet:
                 dout = self.backward(grad)
                 losses.append(calculate_loss(y_batch, prob))
                 self.optimize(lr)
+
             loss, accu, f1sc = self.validate(x_valid, y_valid)
             validation_scores.append({"Epoch": epoch+1, "Loss": loss, "Accuracy": accu, "F1-score": f1sc})
 
+            with open('layers.pkl', 'wb') as f:
+                pickle.dump(self.layers, f)
+
+        with open('scores.pkl', 'wb') as f:
+            pickle.dump([losses, validation_scores], f)
         return losses, validation_scores
 
     def validate(self, x, y):
