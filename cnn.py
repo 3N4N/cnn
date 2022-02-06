@@ -62,7 +62,7 @@ class LayerReLU:
 
 
 class LayerConvolution:
-    def __init__(self, num_filters, dim_filters, stride, padding):
+    def __init__(self, num_filters, dim_filters, stride, padding, weight_scale=0.01):
         self.num_filters = num_filters
         self.dim_filters = dim_filters.astype(int)
         self.stride = stride
@@ -70,6 +70,7 @@ class LayerConvolution:
         self.neurons = None
         self.weights = None
         self.biases = None
+        self.ws = weight_scale
 
     def forward(self, input_neurons):
         # dbgprn(input_neurons.shape)
@@ -79,8 +80,8 @@ class LayerConvolution:
         # dbgprn(input_neurons.shape)
         neurons_padded = zero_pad(input_neurons, self.padding)
 
-        self.weights = np.random.randn(self.num_filters, *self.dim_filters, dim_input[-1]) * 1e-5
-        self.biases = np.random.rand(self.num_filters,1)
+        self.weights = np.random.normal(0.0, self.ws, (self.num_filters, *self.dim_filters, dim_input[-1])) #* 1e-5
+        self.biases = np.zeros((self.num_filters,1))
 
         dim_output = (dim_input[:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
         dim_output = dim_output.astype(int)
@@ -188,8 +189,8 @@ class LayerDense:
         num_neurons = input_neurons.shape[0]
         dim_input = input_neurons.shape[1:]
 
-        self.weights = np.random.randn(np.prod(dim_input), self.num_output) * 1e-5
-        self.biases = np.zeros(self.num_output,)
+        self.weights = np.random.randn(np.prod(dim_input), self.num_output) * np.sqrt(2.0/np.prod(dim_input))
+        self.biases = np.zeros((self.num_output,))
         input_neurons = input_neurons.reshape(num_neurons, -1)
         output = np.dot(input_neurons, self.weights) + self.biases
         return output
