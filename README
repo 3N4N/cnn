@@ -5,12 +5,11 @@ In this assignment of CSE472 course, we implement a CNN from scratch in python.
 
 The layers implemented are as follows.
 
-1. Convolution layer: There will be four (hyper)parameters: the number of output
-   channels, filter dimension, stride, padding.
+1. Convolution layer: There will be four (hyper)parameters: the number of
+   filters, filter dimension, stride, padding.
 2. Activation layer: Implement an element-wise ReLU.
 3. Max-pooling layer: There will be two parameters: filter dimension, stride.
-4. Fully-connected layer: A dense layer. There will be one parameter: output
-   dimension.
+4. Dense layer: There will be one parameter: output dimension.
 5. Flattening layer: It will convert a (series of) convolutional filter maps to
    a column vector.
 6. Softmax layer: It will convert final layer projections to normalized
@@ -21,3 +20,13 @@ The datasets to be used are MNIST and CFAR-10. The links are given below.
 
 - MNIST: http://yann.lecun.com/exdb/mnist/
 - CFAR-10: https://www.cs.toronto.edu/~kriz/cifar.html
+
+
+Instructions Regarding Accuracy and Loss
+----------------------------------------
+
+You have to report the validation-loss, accuracy, and macro-f1 for each epoch
+(one pass over the full training set). You will train your model for 5-10 epochs
+(more if it is runnable in reasonable time). Make sure you tune the learning
+rate (start from 0.001). Select the best model using macro-f1 and report the
+above-mentioned scores.
