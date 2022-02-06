@@ -1,10 +1,15 @@
 import numpy as np
+# import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 from tensorflow.keras import datasets
+from sklearn import metrics
 
 
-def dbgprn(text):
-    print("- [DBG]", text)
+tqdmcols = 80
+np.random.seed(100)
+
+def dbgprn(*args):
+    print("- [DBG]", *args)
     return
 
 def load_mnist():
@@ -47,11 +52,11 @@ class LayerReLU:
     def __init__(self):
         self.neurons = None
     def forward(self, x):
-        # print(x.shape)
+        # dbgprn(x.shape)
         self.neurons = x
         return np.maximum(x, 0)
     def backward(self, dout):
-        # print(dout.shape)
+        # dbgprn(dout.shape)
         return dout * (self.neurons > 0)
 
 
@@ -67,14 +72,14 @@ class LayerConvolution:
         self.biases = None
 
     def forward(self, input_neurons):
-        # print(input_neurons.shape)
+        # dbgprn(input_neurons.shape)
         self.neurons = input_neurons
         num_neurons = input_neurons.shape[0]
         dim_input = input_neurons.shape[1:]
         # dbgprn(input_neurons.shape)
         neurons_padded = zero_pad(input_neurons, self.padding)
 
-        self.weights = np.random.randn(self.num_filters, *self.dim_filters, dim_input[-1]) * 0.00004
+        self.weights = np.random.randn(self.num_filters, *self.dim_filters, dim_input[-1]) * 1e-5
         self.biases = np.random.rand(self.num_filters,1)
 
         dim_output = (dim_input[:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
@@ -130,7 +135,7 @@ class LayerMaxPooling:
         self.neurons = None
 
     def forward(self, input_neurons):
-        # print(input_neurons.shape)
+        # dbgprn(input_neurons.shape)
         self.neurons = input_neurons
         num_neurons = input_neurons.shape[0]
         dim_input = input_neurons.shape[1:]
@@ -154,7 +159,7 @@ class LayerMaxPooling:
         return x == np.max(x)
 
     def backward(self, din):
-        # print(din.shape)
+        # dbgprn(din.shape)
         num_neurons = self.neurons.shape[0]
         dout = np.zeros_like(self.neurons)
 
@@ -178,19 +183,19 @@ class LayerDense:
         self.neurons = None
 
     def forward(self, input_neurons):
-        # print(input_neurons.shape)
+        # dbgprn(input_neurons.shape)
         self.neurons = input_neurons
         num_neurons = input_neurons.shape[0]
         dim_input = input_neurons.shape[1:]
 
-        self.weights = np.random.randn(np.prod(dim_input), self.num_output) * 0.00004
-        self.biases = np.random.randn(self.num_output,)
+        self.weights = np.random.randn(np.prod(dim_input), self.num_output) * 1e-5
+        self.biases = np.zeros(self.num_output,)
         input_neurons = input_neurons.reshape(num_neurons, -1)
         output = np.dot(input_neurons, self.weights) + self.biases
         return output
 
     def backward(self, din):
-        # print(din.shape)
+        # dbgprn(din.shape)
         N = self.neurons.shape[0]
         x = self.neurons.reshape(N, -1)
 
@@ -218,22 +223,22 @@ class LayerFlatten:
 
 
 
-def loss(y, yhat, epsilon=1e-8):
-    N = yhat.shape[0]
-    # yhat = np.clip(yhat, epsilon, 1. - epsilon)
-    logprobs = -np.log(yhat[range(N),y])
-    loss = np.sum(logprobs) / N
-    return loss
-
 def softmax(X):
     x = X - np.max(X, axis=1, keepdims=True)
     e = np.exp(x)
     p = e / np.sum(e, axis=1, keepdims=True)
     return p
 
-def delta_cross_entropy(y, yhat):
+def calculate_loss(y, prob, epsilon=1e-8):
+    N = y.shape[0]
+    # prob = np.clip(prob, epsilon, 1. - epsilon)
+    logprob = -np.log(prob[range(N),y])
+    loss = np.sum(logprob) / N
+    return loss
+
+def delta_cross_entropy(y, prob):
     m = y.shape[0]
-    grad = yhat.copy()
+    grad = prob.copy()
     grad[range(m),y] -= 1
     grad = grad/m
     return grad
@@ -259,10 +264,11 @@ class ConvNet:
             grad = layer.backward(grad)
         return grad
 
-    def create_batches(self, x, y, batch_size=128):
+    def create_batches(self, x, y, batch_size):
         batches = []
         num_examples = x.shape[0]
         num_batches = num_examples // batch_size
+        # dbgprn(x.shape, batch_size, num_batches, num_examples)
         for i in range(num_batches):
             _x = x[i*batch_size:(i+1)*batch_size, :]
             _y = y[i*batch_size:(i+1)*batch_size]
@@ -280,30 +286,41 @@ class ConvNet:
                 layer.biases -= layer.biases * lr
         return
 
-    def train(self, x, y, epochs=3, batch_size=32, lr=1e-4):
-        batches = self.create_batches(x, y, batch_size)
-        losses = []
-        for epoch in tqdm(range(epochs)):
-            for batch in tqdm(batches, leave=False):
-                x, y = batch
-                out = self.forward(x)
-                yhat = softmax(out)
-                grad = delta_cross_entropy(y, yhat)
-                dout = self.backward(grad)
-                losses.append(loss(y, yhat))
-                self.optimize(lr)
-
-        return losses
-
-    def eval(self, x, y):
+    def predict(self, x):
         out = self.forward(x)
-        yhat = softmax(out)
+        prob = softmax(out)
+        yhat = np.argmax(prob, axis=1)
+        return yhat, prob
 
-def model_mnist(N=None):
-    x_train, y_train, x_valid, y_valid, x_test, y_test = load_mnist()
-    if N is None:
-        N = x_train.shape[0]
+    def train(self, x_train, y_train, x_valid, y_valid, epochs=3, batch_size=32, lr=1e-3):
+        # dbgprn(x_train.shape, batch_size)
+        batches = self.create_batches(x_train, y_train, batch_size)
+        losses = []
+        validation_scores = []
+        for epoch in tqdm(range(epochs), ncols=tqdmcols):
+            for batch in tqdm(batches, leave=False, ncols=tqdmcols):
+                x_batch, y_batch = batch
+                out = self.forward(x_batch)
+                prob = softmax(out)
+                grad = delta_cross_entropy(y_batch, prob)
+                dout = self.backward(grad)
+                losses.append(calculate_loss(y_batch, prob))
+                self.optimize(lr)
+            loss, accu, f1sc = self.validate(x_valid, y_valid)
+            validation_scores.append({"Epoch": epoch+1, "Loss": loss, "Accuracy": accu, "F1-score": f1sc})
 
+        return losses, validation_scores
+
+    def validate(self, x, y):
+        yhat, prob = self.predict(x)
+        loss = calculate_loss(y, prob)
+        accu = metrics.accuracy_score(y, yhat)
+        f1sc = metrics.f1_score(y, yhat, average='macro')
+        return loss, accu, f1sc
+
+
+
+def main(x_train, y_train, x_valid, y_valid, x_test, y_test, N, M, T, epochs=1):
     cnn = ConvNet()
     cnn.addlayer(LayerConvolution(6, np.array((5,5)), 1, 2))
     cnn.addlayer(LayerReLU())
@@ -314,25 +331,19 @@ def model_mnist(N=None):
     cnn.addlayer(LayerConvolution(100, np.array((5,5)), 1, 0))
     cnn.addlayer(LayerReLU())
     cnn.addlayer(LayerDense(10))
-    losses = cnn.train(x_train[:N], y_train[:N], epochs=1)
-
-def model_cifar(N=None):
-    x_train, y_train, x_valid, y_valid, x_test, y_test = load_cifar()
-    if N is None:
-        N = x_train.shape[0]
-
-    cnn = ConvNet()
-    cnn.addlayer(LayerConvolution(6, np.array((5,5)), 1, 2))
-    cnn.addlayer(LayerReLU())
-    cnn.addlayer(LayerMaxPooling(np.array((2,2)), 2))
-    cnn.addlayer(LayerConvolution(12, np.array((5,5)), 1, 0))
-    cnn.addlayer(LayerReLU())
-    cnn.addlayer(LayerMaxPooling(np.array((2,2)), 2))
-    cnn.addlayer(LayerConvolution(100, np.array((5,5)), 1, 0))
-    cnn.addlayer(LayerReLU())
-    cnn.addlayer(LayerDense(10))
-    losses = cnn.train(x_train[:N], y_train[:N], epochs=1)
+    losses, validation_scores = cnn.train(x_train[:N], y_train[:N], x_train[:M], y_valid[:M], epochs)
+    test_scores = cnn.validate(x_test[:T], y_test[:T])
+    return losses, validation_scores, test_scores
 
 if __name__ == "__main__":
-    # model_mnist(N=8)
-    model_cifar(N=8)
+    x_train, y_train, x_valid, y_valid, x_test, y_test = load_mnist()
+    # data_cifar = load_cifar()
+    # x_train, y_train, x_valid, y_valid, x_test, y_test = data_cifar
+
+    N = 1; M = 8; T = 8; epochs = 1
+    N = 160; M = 8; T = 8; epochs = 3
+    # N = x_train.shape[0]; M = x_valid.shape[0]; T = x_test.shape[0]; epochs=3
+
+    losses, validation_scores, test_scores = main(x_train, y_train, x_valid, y_valid, x_test, y_test, N, M, T, epochs)
+    print("Losses: {}\nValidation results: {}".format(losses, validation_scores))
+    print("Test results: {}".format(test_scores))
