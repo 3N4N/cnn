@@ -63,7 +63,7 @@ class LayerReLU:
 
 
 class LayerConvolution:
-    def __init__(self, num_filters, dim_filters, stride, padding, weight_scale=0.01):
+    def __init__(self, num_filters, dim_filters, stride, padding, weight_scale=0.01, lr=1e-3):
         self.num_filters = num_filters
         self.dim_filters = dim_filters.astype(int)
         self.stride = stride
@@ -72,6 +72,7 @@ class LayerConvolution:
         self.weights = None
         self.biases = None
         self.ws = weight_scale
+        self.lr = lr
 
     def forward(self, input_neurons):
         # dbgprn(input_neurons.shape)
@@ -124,8 +125,8 @@ class LayerConvolution:
 
             if self.padding != 0:
                 dout[n,:,:,:] = dout_padded[n, self.padding:-self.padding, self.padding:-self.padding, :]
-            self.weights = dw
-            self.biases = db
+            self.weights -= dw * self.lr
+            self.biases -= db * self.lr
         return dout
 
 
@@ -178,11 +179,12 @@ class LayerMaxPooling:
 
 
 class LayerDense:
-    def __init__(self, num_output):
+    def __init__(self, num_output, lr=1e-3):
         self.num_output = num_output
         self.weights = None
         self.biases = None
         self.neurons = None
+        self.lr = lr
 
     def forward(self, input_neurons):
         # dbgprn(input_neurons.shape)
@@ -192,6 +194,7 @@ class LayerDense:
 
         self.weights = np.random.randn(np.prod(dim_input), self.num_output) * np.sqrt(2.0/np.prod(dim_input))
         self.biases = np.zeros((self.num_output,))
+
         input_neurons = input_neurons.reshape(num_neurons, -1)
         output = np.dot(input_neurons, self.weights) + self.biases
         return output
@@ -205,8 +208,8 @@ class LayerDense:
         dw = np.dot(x.T, din)
         db = np.sum(din.T, axis=1)
 
-        self.weights = dw
-        self.biases = db
+        self.weights -= dw * self.lr
+        self.biases -= db * self.lr
 
         return dx
 
@@ -281,13 +284,6 @@ class ConvNet:
             batches.append((_x,_y))
         return batches
 
-    def optimize(self, lr):
-        for layer in self.layers:
-            if isinstance(layer, LayerConvolution) or isinstance(layer, LayerDense):
-                layer.weights -= layer.weights * lr
-                layer.biases -= layer.biases * lr
-        return
-
     def predict(self, x):
         out = self.forward(x)
         prob = softmax(out)
@@ -308,7 +304,6 @@ class ConvNet:
                 grad = delta_cross_entropy(y_batch, prob)
                 dout = self.backward(grad)
                 losses.append(calculate_loss(y_batch, prob))
-                self.optimize(lr)
 
             loss, accu, f1sc = self.validate(x_valid, y_valid)
             validation_scores.append({"Epoch": epoch+1, "Loss": loss, "Accuracy": accu, "F1-score": f1sc})
