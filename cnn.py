@@ -63,7 +63,7 @@ class LayerReLU:
 
 
 class LayerConvolution:
-    def __init__(self, num_filters, dim_filters, stride, padding, weight_scale=0.01, lr=1e-3):
+    def __init__(self, num_filters, dim_filters, stride, padding, weight_scale=0.01, lr=0.02):
         self.num_filters = num_filters
         self.dim_filters = dim_filters.astype(int)
         self.stride = stride
@@ -179,7 +179,7 @@ class LayerMaxPooling:
 
 
 class LayerDense:
-    def __init__(self, num_output, lr=1e-3):
+    def __init__(self, num_output, lr=0.02):
         self.num_output = num_output
         self.weights = None
         self.biases = None
@@ -290,7 +290,7 @@ class ConvNet:
         yhat = np.argmax(prob, axis=1)
         return yhat, prob
 
-    def train(self, x_train, y_train, x_valid, y_valid, epochs=3, batch_size=32, lr=1e-3):
+    def train(self, x_train, y_train, x_valid, y_valid, epochs=3, batch_size=128, save_cache=True):
         # dbgprn(x_train.shape, batch_size)
         batches = self.create_batches(x_train, y_train, batch_size)
         losses = []
@@ -301,18 +301,21 @@ class ConvNet:
                 x_batch, y_batch = batch
                 out = self.forward(x_batch)
                 prob = softmax(out)
+                # yhat = np.argmax(prob, axis=1)
+                # print(np.unique(yhat, return_counts=True))
                 grad = delta_cross_entropy(y_batch, prob)
                 dout = self.backward(grad)
                 losses.append(calculate_loss(y_batch, prob))
-
+                if save_cache:
+                    with open('layers.pkl', 'wb') as f:
+                        pickle.dump(self.layers, f)
+                    with open('losses.pkl', 'wb') as f:
+                        pickle.dump(losses, f)
             loss, accu, f1sc = self.validate(x_valid, y_valid)
             validation_scores.append({"Epoch": epoch+1, "Loss": loss, "Accuracy": accu, "F1-score": f1sc})
-
-            with open('layers.pkl', 'wb') as f:
-                pickle.dump(self.layers, f)
-
-        with open('scores.pkl', 'wb') as f:
-            pickle.dump([losses, validation_scores], f)
+            if save_cache:
+                with open('scores.pkl', 'wb') as f:
+                    pickle.dump(validation_scores, f)
         return losses, validation_scores
 
     def validate(self, x, y):
@@ -324,18 +327,20 @@ class ConvNet:
 
 
 
-def main(x_train, y_train, x_valid, y_valid, x_test, y_test, N, M, T, epochs=1):
+def main(x_train, y_train, x_valid, y_valid, x_test, y_test, N, M, T,
+         lr=1e-3, epochs=1, batch_size=128, save_cache=True):
     cnn = ConvNet()
-    cnn.addlayer(LayerConvolution(6, np.array((5,5)), 1, 2))
+    cnn.addlayer(LayerConvolution(6, np.array((5,5)), 1, 2, lr=lr))
     cnn.addlayer(LayerReLU())
     cnn.addlayer(LayerMaxPooling(np.array((2,2)), 2))
-    cnn.addlayer(LayerConvolution(12, np.array((5,5)), 1, 0))
+    cnn.addlayer(LayerConvolution(12, np.array((5,5)), 1, 0, lr=lr))
     cnn.addlayer(LayerReLU())
     cnn.addlayer(LayerMaxPooling(np.array((2,2)), 2))
     cnn.addlayer(LayerConvolution(100, np.array((5,5)), 1, 0))
     cnn.addlayer(LayerReLU())
-    cnn.addlayer(LayerDense(10))
-    losses, validation_scores = cnn.train(x_train[:N], y_train[:N], x_train[:M], y_valid[:M], epochs)
+    cnn.addlayer(LayerDense(10, lr=lr))
+    losses, validation_scores = cnn.train(x_train[:N], y_train[:N], x_train[:M], y_valid[:M],
+                                          epochs, batch_size=batch_size, save_cache=save_cache)
     test_scores = cnn.validate(x_test[:T], y_test[:T])
     return losses, validation_scores, test_scores
 
@@ -346,8 +351,9 @@ if __name__ == "__main__":
 
     N = 1; M = 8; T = 8; epochs = 1
     N = 160; M = 8; T = 8; epochs = 3
-    # N = x_train.shape[0]; M = x_valid.shape[0]; T = x_test.shape[0]; epochs=3
+    # N = x_train.shape[0]; M = x_valid.shape[0]; T = x_test.shape[0]; epochs=1
 
-    losses, validation_scores, test_scores = main(x_train, y_train, x_valid, y_valid, x_test, y_test, N, M, T, epochs)
+    losses, validation_scores, test_scores = main(x_train, y_train, x_valid, y_valid, x_test, y_test,
+                                                  N, M, T, 1e-3, epochs, 32, False)
     print("Losses: {}\nValidation results: {}".format(losses, validation_scores))
     print("Test results: {}".format(test_scores))
