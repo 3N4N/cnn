@@ -7,7 +7,7 @@ import pickle
 
 
 tqdmcols = 80
-np.random.seed(100)
+np.random.seed(111)
 
 def dbgprn(*args):
     print("- [DBG]", *args)
@@ -21,14 +21,19 @@ def load_mnist():
     y_valid = y_eval[:5000]
     x_test = x_eval[5000:, :, :]
     y_test = y_eval[5000:]
-    x_train = np.expand_dims(x_train, axis=3)
-    x_test = np.expand_dims(x_test, axis=3)
-    x_valid = np.expand_dims(x_valid, axis=3)
+    # x_train = np.expand_dims(x_train, axis=3)
+    # x_test = np.expand_dims(x_test, axis=3)
+    # x_valid = np.expand_dims(x_valid, axis=3)
+    x_train = np.expand_dims(x_train, axis=1)
+    x_test = np.expand_dims(x_test, axis=1)
+    x_valid = np.expand_dims(x_valid, axis=1)
     return x_train, y_train, x_valid, y_valid, x_test, y_test
 
 def load_cifar():
     # cp cifar-10-batches-py.tar.gz ~/.keras/datasets/
     (x_train, y_train), (x_eval, y_eval) = datasets.cifar10.load_data()
+    x_train = np.moveaxis(x_train, 1, 3)
+    x_eval = np.moveaxis(x_eval, 1, 3)
     x_train = x_train.astype(float) / 255
     x_eval  = x_eval.astype(float)  / 255
     x_valid = x_eval[:5000, :, :]
@@ -45,7 +50,8 @@ def dReLU(x):
     return 1. * (x > 0)
 
 def zero_pad(X, pad):
-    X_pad = np.pad(X, ((0, 0), (pad, pad), (pad, pad), (0,0)))
+    # X_pad = np.pad(X, ((0, 0), (pad, pad), (pad, pad), (0,0)))
+    X_pad = np.pad(X, ((0, 0), (0,0), (pad, pad), (pad, pad)))
     return X_pad
 
 
@@ -53,19 +59,17 @@ class LayerReLU:
     def __init__(self):
         self.neurons = None
     def forward(self, x):
-        # dbgprn(x.shape)
         self.neurons = x
         return np.maximum(x, 0)
     def backward(self, dout):
-        # dbgprn(dout.shape)
         return dout * (self.neurons > 0)
 
 
 
 class LayerConvolution:
-    def __init__(self, num_filters, dim_filters, stride, padding, weight_scale=0.01, lr=0.02):
-        self.num_filters = num_filters
-        self.dim_filters = dim_filters.astype(int)
+    def __init__(self, nfilters, dfilters, stride, padding, weight_scale=0.01, lr=0.02):
+        self.nfilters = nfilters
+        self.dfilters = dfilters.astype(int)
         self.stride = stride
         self.padding = padding
         self.neurons = None
@@ -74,143 +78,184 @@ class LayerConvolution:
         self.ws = weight_scale
         self.lr = lr
 
-    def forward(self, input_neurons):
-        # dbgprn(input_neurons.shape)
-        self.neurons = input_neurons
-        num_neurons = input_neurons.shape[0]
-        dim_input = input_neurons.shape[1:]
-        # dbgprn(input_neurons.shape)
-        neurons_padded = zero_pad(input_neurons, self.padding)
+    def forward(self, x):
+        N, C, H, W = x.shape
+        stride = self.stride
+        padding =  self.padding
 
-        self.weights = np.random.normal(0.0, self.ws, (self.num_filters, *self.dim_filters, dim_input[-1])) #* 1e-5
-        self.biases = np.zeros((self.num_filters,1))
+        if self.weights is None:
+            # dbgprn('conv')
+            w = np.random.normal(0.0, self.ws, (self.nfilters, C, *self.dfilters)) #* 1e-5
+            b = np.zeros((self.nfilters,))
+        else:
+            w = self.weights
+            b = self.biases
 
-        dim_output = (dim_input[:-1] - self.dim_filters + 2*self.padding) / self.stride + 1
-        dim_output = dim_output.astype(int)
-        output = np.zeros((num_neurons, *dim_output, self.num_filters))
+        F, _, FH, FW = w.shape
+        oH = int((H - FH + 2*padding)/stride + 1)
+        oW = int((W - FW + 2*padding)/stride + 1)
 
-        for n in range(num_neurons):
-            for h in range(dim_output[0]):
-                for w in range(dim_output[1]):
-                    rows = slice(h * self.stride, h * self.stride + self.dim_filters[0])
-                    cols = slice(w * self.stride, w * self.stride + self.dim_filters[1])
-                    for c in range(self.num_filters):
-                        slide = neurons_padded[n, rows, cols, :]
-                        output[n, h, w, c] = np.sum(slide * self.weights[c,:,:,:]) + self.biases[c]
-        return output
+        out = np.zeros((N, F, oH, oW))
 
-    def backward(self, din):
-        num_neurons = self.neurons.shape[0]
+        padded_x = zero_pad(x, padding)
+        _, _, padded_H, padded_W = padded_x.shape
 
-        dout = np.zeros_like(self.neurons)
-        neurons_padded = zero_pad(self.neurons, self.padding)
-        dout_padded = zero_pad(dout, self.padding)
+        w_row = w.reshape(F, C * FH * FW)
+        x_col = np.zeros((C * FH * FW, oH * oW))
+        for i in range(N):
+            c = 0
+            for j in range(0, padded_H - FH + 1, stride):
+                for k in range(0, padded_W - FW + 1, stride):
+                    x_col[:, c] = padded_x[i, :, j:j+FH, k:k+FW].reshape(C * FH * FW)
+                    c += 1
+            out[i,:,:,:] = (np.dot(w_row, x_col) + b.reshape(-1, 1)).reshape(F, oH, oW)
 
-        dw = np.zeros_like(self.weights)
-        db = np.zeros_like(self.biases)
+        self.weights = w
+        self.biases = b
+        self.neurons = x
 
-        dim_neurons = neurons_padded.shape[1:]
+        return out
 
-        for n in range(num_neurons):
-            for h in range(din.shape[1]):
-                for w in range(din.shape[2]):
-                    rows = slice(h * self.stride, h * self.stride + self.dim_filters[0])
-                    cols = slice(w * self.stride, w * self.stride + self.dim_filters[1])
+    def backward(self, dout):
+        w = self.weights
+        b = self.biases
+        x = self.neurons
+        stride = self.stride
+        padding =  self.padding
 
-                    for c in range(self.num_filters):
-                        slide = neurons_padded[n, rows, cols, :]
-                        dout_padded[n, rows, cols, :] += self.weights[c,:,:,:] * din[n,h,w,c]
-                        dw[c,:,:,:] += slide * din[n,h,w,c]
-                        db[c] += din[n,h,w,c]
+        N, C, H, W = x.shape
+        F, _, FH, FW = w.shape
 
-            if self.padding != 0:
-                dout[n,:,:,:] = dout_padded[n, self.padding:-self.padding, self.padding:-self.padding, :]
+        _,_, oH, oW = dout.shape
+
+        padded_x = zero_pad(x, padding)
+        _, _, padded_H, padded_W = padded_x.shape
+
+        dx = np.zeros_like(x)
+        dw = np.zeros_like(w)
+        db = np.zeros_like(b)
+
+        w_row = w.reshape(F, C * FH * FW)
+        x_col = np.zeros((C * FH * FW, oH * oW))
+
+        for i in range(N):
+            curr_dout = dout[i, :, :, :].reshape(F, oH * oW)
+            curr_out = np.dot(w_row.T, curr_dout)
+            curr_dpx = np.zeros(padded_x.shape[1:])
+            c = 0
+            for j in range(0, padded_H - FH + 1, stride):
+                for k in range(0, padded_W - FW + 1, stride):
+                    curr_dpx[:, j:j+FH, k:k+FW] += curr_out[:, c].reshape(C, FH, FW)
+                    x_col[:, c] = padded_x[i, :, j:j+FH, k:k+FW].reshape(C * FH * FW)
+                    c += 1
+            if padding != 0:
+                dx[i] = curr_dpx[:, padding:-padding, padding:-padding]
+            else:
+                dx[i] = curr_dpx
+            dw += np.dot(curr_dout, x_col.T).reshape(F, C, FH, FW)
+            db += np.sum(curr_dout, axis=1)
+
             self.weights -= dw * self.lr
             self.biases -= db * self.lr
-        return dout
+
+        return dx
 
 
 
 class LayerMaxPooling:
-    def __init__(self, dim_filters, stride):
-        self.dim_filters = dim_filters.astype(int)
+    def __init__(self, dfilters, stride):
+        self.dfilters = dfilters.astype(int)
         self.stride = stride
         self.neurons = None
 
-    def forward(self, input_neurons):
-        # dbgprn(input_neurons.shape)
-        self.neurons = input_neurons
-        num_neurons = input_neurons.shape[0]
-        dim_input = input_neurons.shape[1:]
+    def forward(self, x):
+        stride = self.stride
+        N, C, H, W = x.shape
+        pool_height, pool_width = self.dfilters
 
-        dim_output = (dim_input[:-1] - self.dim_filters) / self.stride + 1
-        dim_output = dim_output.astype(int)
+        out_H = 1 + (H - pool_height) // stride
+        out_W = 1 + (W - pool_width) // stride
 
-        output = np.zeros((num_neurons, *dim_output, dim_input[-1]))
+        out = np.zeros((N, C, out_H, out_W))
 
-        for n in range(num_neurons):
-            for h in range(dim_output[0]):
-                for w in range(dim_output[1]):
-                    rows = slice(h * self.stride, h * self.stride + self.dim_filters[0])
-                    cols = slice(w * self.stride, w * self.stride + self.dim_filters[1])
-                    for c in range(dim_input[-1]):
-                        slide = input_neurons[n, rows, cols, c]
-                        output[n, h, w, c] = np.max(slide)
-        return output
+        for i in range(N):
+            curr_out = np.zeros((C, out_H * out_W))
+            c = 0
+            for j in range(0, H - pool_height + 1, stride):
+                for k in range(0, W - pool_width + 1, stride):
+                    curr_region = x[i, :, j:j+pool_height, k:k+pool_width].reshape(C, pool_height * pool_width)
+                    curr_max_pool = np.max(curr_region, axis=1)
+                    curr_out[:, c] = curr_max_pool
+                    c += 1
+            out[i, :, :, :] = curr_out.reshape(C, out_H, out_W)
 
-    def create_mask(self, x):
-        return x == np.max(x)
+        self.neurons = x
+        return out
 
-    def backward(self, din):
-        # dbgprn(din.shape)
-        num_neurons = self.neurons.shape[0]
-        dout = np.zeros_like(self.neurons)
+    def backward(self, dout):
+        x = self.neurons
+        pool_height, pool_width = self.dfilters
+        stride = self.stride
 
-        for n in range(num_neurons):
-            for h in range(din.shape[1]):
-                for w in range(din.shape[2]):
-                    rows = slice(h * self.stride, h * self.stride + self.dim_filters[0])
-                    cols = slice(w * self.stride, w * self.stride + self.dim_filters[1])
-                    for c in range(din.shape[-1]):
-                        slide = self.neurons[n, rows, cols, c]
-                        mask = self.create_mask(slide)
-                        dout[n, rows, cols, c] += din[n, h, w, c] * mask
-        return dout
+        N, C, H, W = x.shape
+        _, _, out_H, out_W = dout.shape
+
+        dx = np.zeros_like(x)
+
+        for i in range(N):
+            curr_dout = dout[i, :].reshape(C, out_H * out_W)
+            c = 0
+            for j in range(0, H - pool_height + 1, stride):
+                for k in range(0, W - pool_width + 1, stride):
+                    curr_region = x[i, :, j:j+pool_height, k:k+pool_width].reshape(C, pool_height * pool_width)
+                    curr_max_idx = np.argmax(curr_region, axis=1)
+                    curr_dout_region = curr_dout[:, c]
+                    curr_dpooling = np.zeros_like(curr_region)
+                    curr_dpooling[np.arange(C), curr_max_idx] = curr_dout_region
+                    dx[i, :, j:j+pool_height, k:k+pool_height] = curr_dpooling.reshape(C, pool_height, pool_width)
+                    c += 1
+
+        return dx
 
 
 class LayerDense:
-    def __init__(self, num_output, lr=0.02):
-        self.num_output = num_output
+    def __init__(self, nout, lr=0.02):
+        self.nout = nout
         self.weights = None
         self.biases = None
         self.neurons = None
         self.lr = lr
+        self.ws=0.01
 
-    def forward(self, input_neurons):
-        # dbgprn(input_neurons.shape)
-        self.neurons = input_neurons
-        num_neurons = input_neurons.shape[0]
-        dim_input = input_neurons.shape[1:]
+    def forward(self, x):
+        N, C, H, W = x.shape
 
-        self.weights = np.random.randn(np.prod(dim_input), self.num_output) * np.sqrt(2.0/np.prod(dim_input))
-        self.biases = np.zeros((self.num_output,))
+        if self.weights is None:
+            # dbgprn('dense')
+            w = np.random.randn(C*H*W, self.nout) * np.sqrt(2.0/(H*W))
+            b = np.zeros((self.nout,))
+        else:
+            w = self.weights
+            b = self.biases
+        x_new = x.reshape(N, -1)
+        out = np.dot(x_new, w) + b
 
-        input_neurons = input_neurons.reshape(num_neurons, -1)
-        output = np.dot(input_neurons, self.weights) + self.biases
-        return output
+        self.neurons = x
+        self.weights = w
+        self.biases = b
+        return out
 
-    def backward(self, din):
-        # dbgprn(din.shape)
-        N = self.neurons.shape[0]
-        x = self.neurons.reshape(N, -1)
+    def backward(self, dout):
+        x, w, b = self.neurons, self.weights, self.biases
+        N = x.shape[0]
+        x_new = x.reshape(N, -1)
 
-        dx = np.dot(din, self.weights.T).reshape(self.neurons.shape)
-        dw = np.dot(x.T, din)
-        db = np.sum(din.T, axis=1)
+        dx = np.dot(dout, w.T).reshape(x.shape)
+        dw = np.dot(x_new.T, dout)
+        db = np.sum(dout.T, axis=1)
 
         self.weights -= dw * self.lr
         self.biases -= db * self.lr
-
         return dx
 
 
@@ -236,15 +281,15 @@ def softmax(X):
 
 def calculate_loss(y, prob, epsilon=1e-8):
     N = y.shape[0]
-    # prob = np.clip(prob, epsilon, 1. - epsilon)
-    logprob = -np.log(prob[range(N),y])
+    prob = np.clip(prob, epsilon, 1. - epsilon)
+    logprob = -np.log(prob[np.arange(N),y])
     loss = np.sum(logprob) / N
     return loss
 
 def delta_cross_entropy(y, prob):
     m = y.shape[0]
     grad = prob.copy()
-    grad[range(m),y] -= 1
+    grad[np.arange(m),y] -= 1
     grad = grad/m
     return grad
 
@@ -260,7 +305,9 @@ class ConvNet:
         return
 
     def forward(self, neurons):
+        i = 0
         for layer in self.layers:
+            # dbgprn(i, neurons.shape)
             neurons = layer.forward(neurons)
         return neurons
 
@@ -330,10 +377,10 @@ class ConvNet:
 def main(x_train, y_train, x_valid, y_valid, x_test, y_test, N, M, T,
          lr=1e-3, epochs=1, batch_size=128, save_cache=True):
     cnn = ConvNet()
-    cnn.addlayer(LayerConvolution(6, np.array((5,5)), 1, 2, lr=lr))
-    cnn.addlayer(LayerReLU())
-    cnn.addlayer(LayerMaxPooling(np.array((2,2)), 2))
-    cnn.addlayer(LayerConvolution(12, np.array((5,5)), 1, 0, lr=lr))
+    cnn.addlayer(LayerConvolution(6, np.array((5,5)), 1, 2, lr=lr)) # 28x28x1
+    cnn.addlayer(LayerReLU())                                       # 28x28x6
+    cnn.addlayer(LayerMaxPooling(np.array((2,2)), 2))               # 28x28x6
+    cnn.addlayer(LayerConvolution(12, np.array((5,5)), 1, 0, lr=lr)) #14x14x6
     cnn.addlayer(LayerReLU())
     cnn.addlayer(LayerMaxPooling(np.array((2,2)), 2))
     cnn.addlayer(LayerConvolution(100, np.array((5,5)), 1, 0))
@@ -350,10 +397,10 @@ if __name__ == "__main__":
     # x_train, y_train, x_valid, y_valid, x_test, y_test = data_cifar
 
     N = 1; M = 8; T = 8; epochs = 1
-    N = 160; M = 8; T = 8; epochs = 3
-    # N = x_train.shape[0]; M = x_valid.shape[0]; T = x_test.shape[0]; epochs=1
+    N = 160; M = 8; T = 8; epochs = 5
+    N = x_train.shape[0]; M = x_valid.shape[0]; T = x_test.shape[0]; epochs=1; batch_size=128
 
     losses, validation_scores, test_scores = main(x_train, y_train, x_valid, y_valid, x_test, y_test,
-                                                  N, M, T, 1e-3, epochs, 32, False)
+                                                  N, M, T, 1e-2, epochs, batch_size, False)
     print("Losses: {}\nValidation results: {}".format(losses, validation_scores))
     print("Test results: {}".format(test_scores))
